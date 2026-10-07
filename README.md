@@ -11,10 +11,16 @@ It does no polling: the pane redraws when Claude writes the draft and when a tur
 ## Install
 
 ```
-/plugin install praft --marketplace <owner>/praft
+/plugin install praft --marketplace yarcod/praft
 ```
 
 Or for local development: `ln -s "$PWD" ~/.claude/skills/praft`.
+
+## Forges
+
+It doesn't depend on a forge. Approving asks Claude to push and open the request with
+whatever tool your session has (`gh`, `glab`, an MCP server). The pane says **MR** when
+`origin` is a GitLab remote and **PR** otherwise.
 
 ## Use
 
@@ -50,3 +56,7 @@ Changes / Behaviour change / Tests / Gaps   (short bullet sections)
 claude plugin validate .
 claude plugin test .
 ```
+
+## License
+
+MIT

@@ -30,6 +30,10 @@ const git = async ($: EngineInterface, args: string[]) => {
 
 const draftDir = async ($: EngineInterface) => (await git($, ['rev-parse', '--git-path', DIR])).trim()
 const draftPath = async ($: EngineInterface, branch: string) => `${await draftDir($)}/${branch.replaceAll('/', '~')}.md`
+// GitLab calls it a merge request (MR); everything else here, a pull request (PR).
+const kindOf = async ($: EngineInterface) =>
+  /gitlab/i.test(await git($, ['remote', 'get-url', 'origin'])) ? 'MR' : 'PR'
+
 const currentBranch = async ($: EngineInterface) => (await git($, ['branch', '--show-current'])).trim()
 
 // Branches with a draft, oldest first, so a stack reads bottom-up.
@@ -148,19 +152,20 @@ const rewordSubject = async ($: EngineInterface, sha: string, subject: string): 
 const subjectOf = (p: { type: string; scope: string; bang: string; text: string }) =>
   `${p.type}${p.scope ? `(${p.scope})` : ''}${p.bang}: ${p.text}`
 
-const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'PR draft' })
+const openPane = async ($: EngineInterface) => $.ui.open({ id: PANE, title: `${await kindOf($)} draft` })
 
 const askForDraft = async ($: EngineInterface, branch: string, ref: string) => {
   const path = await draftPath($, branch)
+  const kind = await kindOf($)
   await $.prompt.submit({
     text:
-      `Write the pull/merge request draft for branch ${branch} (commits ${ref}..${branch}) to ${path}, ` +
+      `Write the ${kind} draft for branch ${branch} (commits ${ref}..${branch}) to ${path}, ` +
       'for the praft pane. Line 1 `# <conventional title: the outcome>`; line 2 ' +
       `\`<!-- base: ${ref} -->\` (the branch it targets; the branch below it if stacked); ` +
       'then 1–3 sentences (what was wrong, what now holds); ' +
       'then short one-line-bullet sections Changes / Behaviour change / Tests / Gaps; ' +
-      'last `## Commits` with one `- <sha8> — <which part of the PR it solves>` per commit. ' +
-      'Terse. Do not push or open the PR.',
+      `last \`## Commits\` with one \`- <sha8> — <which part of the ${kind} it solves>\` per commit. ` +
+      `Terse. Do not push or open the ${kind}.`,
   })
 }
 
@@ -176,7 +181,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'praft',
-      description: 'Review the PR draft and its commits in a pane',
+      description: 'Review the PR/MR draft and its commits in a pane',
       argumentHint: '[base ref; default: the draft’s base, else origin/main]',
     })
     return next(e)
@@ -207,16 +212,17 @@ export const register: Register = on => {
 
   on('command.run', { command: 'praft' }, async ($, e) => {
     const branch = await currentBranch($)
-    if (branch === '') return { text: 'praft: HEAD is detached; check out the PR’s branch first.' }
+    const kind = await kindOf($)
+    if (branch === '') return { text: `praft: HEAD is detached; check out the ${kind}’s branch first.` }
     const arg = (e.args ?? '').trim()
     if (arg !== '') await update($, bases, m => ({ ...m, [branch]: arg }))
     await update($, viewing, () => '')
     const ref = await baseOf($, branch)
     await openPane($)
-    if ((await readDraft($, branch)).exists) return { text: `PR draft for ${branch} opened (base ${ref}).` }
+    if ((await readDraft($, branch)).exists) return { text: `${kind} draft for ${branch} opened (base ${ref}).` }
     // A command can't submit a prompt while it holds the turn; queue it just after.
     $.clock.after(0, () => void askForDraft($, branch, ref).catch(() => undefined))
-    return { text: `No PR draft for ${branch} yet; asked Claude to write one (base ${ref}).` }
+    return { text: `No ${kind} draft for ${branch} yet; asked Claude to write one (base ${ref}).` }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
@@ -225,8 +231,9 @@ export const register: Register = on => {
     try {
       await read($, rev)
       const current = await currentBranch($)
+      const kind = await kindOf($)
       const branch = (await read($, viewing)) || current
-      if (branch === '') return <Text dimColor>HEAD is detached. Check out the PR’s branch, then refresh.</Text>
+      if (branch === '') return <Text dimColor>HEAD is detached. Check out the {kind}’s branch, then refresh.</Text>
       // Rewording rebases HEAD, so it works on the checked-out branch and on any
       // branch below it in a stack (`--update-refs` moves those along).
       const isCurrent =
@@ -237,7 +244,7 @@ export const register: Register = on => {
       const opened = await read($, expanded)
       const draft = await readDraft($, branch)
       const list = await commits($, ref, branch)
-      // Whole-PR size, as the forge will show it (merge-base to the branch).
+      // Whole-request size, as the forge will show it (merge-base to the branch).
       const short = await git($, ['diff', '--shortstat', `${ref}...${branch}`])
       const total = {
         files: Number(/(\d+) files? changed/.exec(short)?.[1] ?? 0),
@@ -295,7 +302,9 @@ export const register: Register = on => {
             <Input key="title" value={draft.title} submitLabel="Save title" onSubmit={(v: string) => setTitle(v)} />
           ) : (
             <Box gap={1}>
-              <Text>No PR draft for {branch} yet.</Text>
+              <Text>
+                No {kind} draft for {branch} yet.
+              </Text>
               <Button key="draft" label="Ask Claude to draft it" onPress={() => void askForDraft($, branch, ref)} />
             </Box>
           )}
@@ -316,7 +325,7 @@ export const register: Register = on => {
                 key="desc-nudge"
                 placeholder="Tell Claude what to change in the title or description"
                 submitLabel="Send"
-                onSubmit={(v: string) => v.trim() && ask(`PR draft ${path}: ${v.trim()}`)}
+                onSubmit={(v: string) => v.trim() && ask(`${kind} draft ${path}: ${v.trim()}`)}
               />
             </Box>
           )}
@@ -423,11 +432,11 @@ export const register: Register = on => {
               <Button
                 key="approve"
                 variant="primary"
-                label="Approve and open PR"
+                label={`Approve and open ${kind}`}
                 onPress={() =>
                   ask(
-                    `PR draft for ${branch} approved in the praft pane (${path}). Push ${branch} and open ` +
-                      `the pull/merge request into ${ref} with that title and body (drop the ## Commits section ` +
+                    `${kind} draft for ${branch} approved in the praft pane (${path}). Push ${branch} and open ` +
+                      `the ${kind} into ${ref} with that title and body (drop the ## Commits section ` +
                       'and the base comment).',
                   )
                 }

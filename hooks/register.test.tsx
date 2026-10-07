@@ -9,8 +9,9 @@ const PATCH = 'diff --git a/x.rs b/x.rs\nindex 1..2 100644\n--- a/x.rs\n+++ b/x.
 // Only the pane's size matters here; the rest of its props are the engine's.
 const PANE_PROPS = { title: 'PR draft', isFocused: true, bodyColumns: 100, placement: 'dock' } as never
 
-const git = (argv: readonly string[]) => {
+const git = (argv: readonly string[], remote = '') => {
   const a = argv.slice(1).join(' ')
+  if (a.startsWith('remote get-url')) return remote
   if (a.startsWith('merge-base')) return null
   if (a.startsWith('rev-parse --git-path')) return '.git/praft\n'
   if (a.startsWith('branch')) return 'fix/x\n'
@@ -23,12 +24,12 @@ const git = (argv: readonly string[]) => {
 
 type Run = { argv: readonly string[]; env?: Record<string, string> }
 
-const fakeRepo = (on: Parameters<TestBody>[1], files: Record<string, string>) => {
+const fakeRepo = (on: Parameters<TestBody>[1], files: Record<string, string>, remote = '') => {
   const runs: Run[] = []
   const prompts: string[] = []
   on('process.run', async (_$, e) => {
     runs.push({ argv: e.argv, env: e.init?.env })
-    const out = git(e.argv)
+    const out = git(e.argv, remote)
     return {
       value: {
         exitCode: out === null ? 1 : 0,
@@ -102,7 +103,7 @@ test('stacked drafts get a tab each, with their own base', async ($, on) => {
   await ui.press({ key: `t-${SHA}` })
   expect(await ui.find({ key: `type-${SHA}` })).toBeUndefined()
   await ui.press({ key: 'approve' })
-  expect(prompts[0]).toContain('Push feat/y and open the pull/merge request into fix/x')
+  expect(prompts[0]).toContain('Push feat/y and open the PR into fix/x')
 })
 
 test('with no draft, /praft asks Claude to write one', async ($, on) => {
@@ -128,4 +129,13 @@ test('picking a type or topic rewords that commit, subject passed by env', async
 
   await ui.select({ key: `scope-${SHA}`, value: '(none)' })
   expect(runs.filter(r => r.argv[1] === 'rebase').at(-1)?.env?.PRAFT_SUBJECT).toBe('fix: gate')
+})
+
+test('a GitLab remote says MR, anything else PR', async ($, on) => {
+  const { prompts } = fakeRepo(on, { '.git/praft/fix~x.md': DRAFT }, 'git@gitlab.com:team/repo.git\n')
+  const ui = await mount($)
+  expect(await ui.find({ text: 'Approve and open MR' })).toBeDefined()
+  await ui.press({ key: 'approve' })
+  expect(prompts[0]).toContain('MR draft for fix/x approved')
+  expect(prompts[0]).toContain('open the MR into origin/main')
 })

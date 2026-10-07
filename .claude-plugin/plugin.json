@@ -1,7 +1,7 @@
 {
   "name": "praft",
   "version": "0.2.0",
-  "description": "PR draft pane: review a pull/merge request's title, description and commits before it is opened",
+  "description": "Review a pull/merge request draft (title, description, commits) in a pane before it is opened",
   "author": {
     "name": "Daniel Edholm"
   },
@@ -12,5 +12,7 @@
     "review",
     "pane"
   ],
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "license": "MIT",
+  "repository": "https://github.com/yarcod/praft"
 }
