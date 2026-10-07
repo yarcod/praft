@@ -1,0 +1,16 @@
+{
+  "name": "praft",
+  "version": "0.2.0",
+  "description": "PR draft pane: review a pull/merge request's title, description and commits before it is opened",
+  "author": {
+    "name": "Daniel Edholm"
+  },
+  "keywords": [
+    "pull-request",
+    "merge-request",
+    "git",
+    "review",
+    "pane"
+  ],
+  "types": "./types/index.d.ts"
+}

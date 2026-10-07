@@ -1,0 +1,16 @@
+{
+  "name": "praft",
+  "owner": {
+    "name": "Daniel Edholm"
+  },
+  "metadata": {
+    "description": "praft: review a PR draft and its commits in a Claude Code pane"
+  },
+  "plugins": [
+    {
+      "name": "praft",
+      "source": "./",
+      "description": "PR draft pane: review title, description and commits before opening the PR"
+    }
+  ]
+}
